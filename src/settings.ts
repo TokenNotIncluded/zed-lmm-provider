@@ -32,22 +32,71 @@ export function mergeSettings(
     const existing =
       root.language_models?.openai_compatible?.lmm?.available_models;
     if (Array.isArray(existing) && Array.isArray(next.available_models)) {
-      const byId = new Map(
-        existing
-          .filter(
-            (model) =>
-              model &&
-              typeof model === "object" &&
-              typeof model.name === "string",
-          )
-          .map((model) => [model.name, model]),
-      );
+      const byId = new Map<string, Record<string, unknown>>();
+      for (const model of existing) {
+        if (
+          model &&
+          typeof model === "object" &&
+          typeof model.name === "string"
+        )
+          byId.set(model.name, object(model));
+      }
       provider = {
         ...next,
-        available_models: next.available_models.map((model) => ({
-          ...object(model),
-          ...byId.get(object(model).name),
-        })),
+        available_models: next.available_models.map((model) => {
+          const current = object(model);
+          const saved =
+            typeof current.name === "string"
+              ? byId.get(current.name)
+              : undefined;
+          if (!saved) return current;
+          const capabilities = object(current.capabilities ?? {});
+          const maxTokens =
+            saved.max_tokens === undefined
+              ? current.max_tokens
+              : saved.max_tokens;
+          requireValue(
+            typeof maxTokens === "number" &&
+              Number.isSafeInteger(maxTokens) &&
+              maxTokens > 0,
+            "Existing LMM context limits must be positive safe integers.",
+          );
+          let maxOutput =
+            saved.max_output_tokens === undefined
+              ? current.max_output_tokens
+              : saved.max_output_tokens;
+          if (maxOutput !== undefined) {
+            requireValue(
+              typeof maxOutput === "number" &&
+                Number.isSafeInteger(maxOutput) &&
+                maxOutput > 0,
+              "Existing LMM output limits must be positive safe integers.",
+            );
+            if (saved.max_output_tokens === undefined)
+              maxOutput = Math.min(maxOutput, maxTokens);
+            else
+              requireValue(
+                maxOutput <= maxTokens,
+                "Existing LMM output limits exceed their context limits.",
+              );
+          }
+          return {
+            ...current,
+            ...saved,
+            name: current.name,
+            display_name: current.display_name,
+            max_tokens: maxTokens,
+            ...(maxOutput === undefined
+              ? {}
+              : { max_output_tokens: maxOutput }),
+            capabilities: {
+              ...capabilities,
+              ...object(saved.capabilities ?? {}),
+              // The current catalog determines which inference endpoint is usable.
+              chat_completions: capabilities.chat_completions,
+            },
+          };
+        }),
       };
     }
   }

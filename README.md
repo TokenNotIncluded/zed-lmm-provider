@@ -1,6 +1,6 @@
 # LMM for Zed
 
-<img src="https://raw.githubusercontent.com/TokenNotIncluded/zed-lmm-provider/main/assets/icon.png" alt="LMM logo" width="128" height="128" />
+<img src="./assets/icon.svg" alt="LMM for Zed" width="128" height="128" />
 
 **0.1.1 is a preview release.** Browser login requires the LMM server to register `lmm-zed` and advertise it in authorization-server metadata as `lmm_client_ids_supported`. Before opening a browser, the bridge verifies that registration along with the issuer, endpoints, S256 PKCE, and resource metadata. An older server receives a clear Zed-specific update message; the bridge never substitutes another client's identity. Packaging and local tests do not establish live production login or model access.
 
@@ -8,7 +8,7 @@ Use your LMM OAuth account in Zed's native AI model selector, with account-scope
 
 Zed's extension API currently cannot register an AI model provider. This package runs a local authenticated OpenAI-compatible bridge and configures Zed's built-in provider support. It is distributed through npm, **not the Zed extension marketplace**.
 
-The package includes the LMM logo in `assets/icon.png`. Zed currently uses a fixed generic icon for [OpenAI-compatible providers](https://github.com/zed-industries/zed/blob/main/crates/language_models/src/provider/open_ai_compatible.rs); provider settings do not support a custom logo in the model picker.
+The package includes the editable LMM for Zed mark in `assets/icon.svg` and its PNG export in `assets/icon.png`. Zed currently uses a fixed generic icon for [OpenAI-compatible providers](https://github.com/zed-industries/zed/blob/main/crates/language_models/src/provider/open_ai_compatible.rs); provider settings do not support a custom logo in the model picker.
 
 ## Quick start
 
@@ -24,6 +24,8 @@ lmm-zed start
 Login opens LMM in your browser. Approve the groups you want to use. `start` loads that account's catalog, adds the LMM provider to Zed's user settings, and launches Zed with a randomly generated local bridge key. Select an LMM model in Zed's AI model selector. Keep the bridge terminal running while using it; Ctrl+C stops the bridge.
 
 `start` preserves unrelated settings and JSONC comments, saves a timestamped backup before changes, and keeps your existing LMM model limits/capabilities. It updates the LMM endpoint and catalog model list. A running Zed instance may ignore new environment variables, so quit it before starting.
+
+Catalog protocol changes take effect even when you preserve custom tool/image settings. If your saved context limit is smaller than the default output allowance, the new default output is capped to that context. An explicitly saved invalid limit stops configuration before the settings file changes.
 
 The generated provider uses only OpenAI Chat Completions or Responses models advertised by your account. Anthropic-only models are omitted. The bridge supports text, tools and images when enabled in model settings, but this release has not been verified inside a real Zed session or against live billed LMM inference.
 
@@ -70,7 +72,7 @@ Options: `--port 7391`, `--issuer https://api.lmm.best`, `--data-dir PATH`, `--s
 
 OAuth credentials are stored in `$XDG_STATE_HOME/lmm-zed/oauth.json` (or `~/.local/state/lmm-zed/oauth.json`) with 0600 permissions inside a 0700 directory. This is private local file storage, not an OS keychain. Rotating refresh tokens are fenced by a durable journal before exchange; ambiguous refresh failures require another login rather than replaying a consumed token.
 
-The bridge binds only `127.0.0.1`, requires a random local Bearer key, verifies Host, and refuses browser Origin requests. The local key is passed through `LMM_API_KEY` only to the launched Zed process; the LMM OAuth token is never written into Zed settings. Requests use the catalog's upstream model and `X-LMM-Group`, and inference is never automatically retried. Local processes with your user permissions can inspect local files/process environments.
+The bridge binds only `127.0.0.1`, requires a random local Bearer key, verifies Host, and refuses browser Origin requests. The local key is passed through `LMM_API_KEY` only to the launched Zed process; the LMM OAuth token is never written into Zed settings. Requests use the catalog's upstream model and `X-LMM-Group`, and inference is never automatically retried. Invalid UTF-8 JSON is rejected before accessing a credential or dispatching inference. Local processes with your user permissions can inspect local files/process environments.
 
 ## Development
 

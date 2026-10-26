@@ -136,6 +136,66 @@ test("ambiguous inference failure never retries and hides upstream errors", asyn
   }
 });
 
+test("bridge rejects corrupt UTF-8 before accessing credentials or dispatching inference", async () => {
+  let credentialCalls = 0;
+  let inferenceCalls = 0;
+  let received = "";
+  const key = "u".repeat(43);
+  const http = new LmmHttp({
+    fetch: async (_input, init) => {
+      inferenceCalls++;
+      received = String(init?.body);
+      return new Response('{"ok":true}', {
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  const bridge = await startBridge({
+    http,
+    models,
+    key,
+    port: 0,
+    credential: async () => {
+      credentialCalls++;
+      return auth;
+    },
+  });
+  const request = (body: RequestInit["body"]) =>
+    fetch(`http://127.0.0.1:${bridge.port}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${key}`,
+        "content-type": "application/json",
+      },
+      body,
+    });
+  try {
+    const invalid = Buffer.concat([
+      Buffer.from(`{"model":"${id}","messages":[{"role":"user","content":"`),
+      Buffer.from([0xff]),
+      Buffer.from('"}]}'),
+    ]);
+    const rejected = await request(invalid);
+    assert.equal(rejected.status, 400);
+    await rejected.body?.cancel();
+    assert.equal(credentialCalls, 0);
+    assert.equal(inferenceCalls, 0);
+    const accepted = await request(
+      JSON.stringify({
+        model: id,
+        messages: [{ role: "user", content: "你好 🐦" }],
+      }),
+    );
+    assert.equal(accepted.status, 200);
+    await accepted.body?.cancel();
+    assert.equal(credentialCalls, 1);
+    assert.equal(inferenceCalls, 1);
+    assert.equal(JSON.parse(received).messages[0].content, "你好 🐦");
+  } finally {
+    bridge.close();
+  }
+});
+
 test("settings admits only catalog models with explicit metadata; Responses-only protocol works", () => {
   assert.throws(() =>
     zedSettings(models, [{ id: "wrong", max_tokens: 100 }], 7391),

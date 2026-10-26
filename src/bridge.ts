@@ -91,7 +91,11 @@ export async function startBridge(options: {
           );
           chunks.push(chunk);
         }
-        const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        const body = JSON.parse(
+          new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+            Buffer.concat(chunks),
+          ),
+        );
         requireValue(
           body &&
             typeof body === "object" &&

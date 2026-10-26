@@ -1,1 +1,5 @@
 The protocol, callback, HTTP, OAuth and refresh journal modules under `src/vendor/` were adapted from the AGPL-3.0-only `@tokennotincluded/pi-lmm-provider` at commit `2692cb036ff98e51ea23aba5200edc77143453e6`, maintained by TokenNotIncluded. Changes remove Pi SDK dependencies, select native OAuth client `lmm-zed`, exclude MCP scopes and name the host Zed. The original AGPL license is included.
+
+The HTTP adapter additionally bounds JSON error bodies, rejects malformed UTF-8, and cancels stalled readers when a request is aborted.
+
+`assets/icon.svg` uses the four unmodified LMM ribbon paths from [`api.lmm.best-microservices/.github/assets/logo-geometry.json`](https://github.com/TokenNotIncluded/lmm-api/blob/ebabe6fcc89dfbfb049bd562666b17f699d90a38/.github/assets/logo-geometry.json). The mark adds a monochrome background and a small original lightning-shaped cue; it does not reproduce the Zed trademark. The master records the user-supplied artwork and SVG adaptation provenance. `assets/icon.png` is the raster export for consumers that require PNG; the editable SVG is the source.

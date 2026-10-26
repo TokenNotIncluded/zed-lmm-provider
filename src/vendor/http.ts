@@ -8,6 +8,43 @@ export interface HttpOptions {
   timeoutMs?: number;
 }
 
+async function readJson(
+  response: Response,
+  signal: AbortSignal,
+  maxBytes: number,
+) {
+  requireValue(response.body);
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  const abort = () => {
+    void reader.cancel().catch(() => {});
+  };
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    while (true) {
+      signal.throwIfAborted();
+      const { value, done } = await reader.read();
+      signal.throwIfAborted();
+      if (done) break;
+      bytes += value.byteLength;
+      requireValue(bytes <= maxBytes, "LMM response exceeded its size limit.");
+      chunks.push(value);
+    }
+    return object(
+      JSON.parse(
+        new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+          Buffer.concat(chunks),
+        ),
+      ),
+    );
+  } finally {
+    signal.removeEventListener("abort", abort);
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
 export class LmmHttp {
   readonly issuer: string;
   readonly resource: string;
@@ -61,7 +98,11 @@ export class LmmHttp {
           response.body
         ) {
           try {
-            const body = object(JSON.parse(await response.text()));
+            const body = await readJson(
+              response,
+              signal,
+              Math.min(maxBytes, 64_000),
+            );
             if (
               typeof body.error === "object" &&
               body.error !== null &&
@@ -79,6 +120,7 @@ export class LmmHttp {
         } else {
           await response.body?.cancel();
         }
+        signal.throwIfAborted();
         if (errorCode === "IP_ACCESS_ROUTE_REJECTED") {
           throw new LmmError(
             "ip_policy",
@@ -116,27 +158,7 @@ export class LmmHttp {
         response.headers.get("content-type")?.split(";")[0]?.trim() ===
           "application/json",
       );
-      requireValue(response.body);
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let bytes = 0;
-      try {
-        while (true) {
-          signal.throwIfAborted();
-          const { value, done } = await reader.read();
-          if (done) break;
-          bytes += value.byteLength;
-          requireValue(
-            bytes <= maxBytes,
-            "LMM response exceeded its size limit.",
-          );
-          chunks.push(value);
-        }
-      } finally {
-        await reader.cancel().catch(() => {});
-        reader.releaseLock();
-      }
-      return object(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      return await readJson(response, signal, maxBytes);
     } catch (error) {
       if (error instanceof LmmError) throw error;
       if (signal.aborted)
