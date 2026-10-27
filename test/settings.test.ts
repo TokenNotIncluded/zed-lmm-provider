@@ -8,8 +8,10 @@ const model = {
   id: "lmm:ZGVmYXVsdA:cmVhbC1tb2RlbA",
   name: "Current catalog model",
   group: "ZGVmYXVsdA",
+  groupName: "default",
   upstream: "real-model",
   apis: ["openai-responses"],
+  groupMultiplier: 1.25,
 };
 
 function merge(saved: Record<string, unknown>, preserve = true) {
@@ -37,7 +39,7 @@ test("preserved limits and tool choices cannot override the current catalog prot
       capabilities,
     });
     assert.equal(updated.name, model.id);
-    assert.equal(updated.display_name, model.name);
+    assert.equal(updated.display_name, `${model.groupName} / ${model.upstream} · 1.25× · context估算`);
     assert.equal(updated.max_tokens, 8192);
     assert.equal(updated.max_output_tokens, 1024);
     assert.deepEqual(updated.capabilities, {

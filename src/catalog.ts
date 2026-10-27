@@ -10,8 +10,10 @@ export interface Model {
   id: string;
   name: string;
   group: string;
+  groupName: string;
   upstream: string;
   apis: string[];
+  groupMultiplier: number | null;
 }
 export function parseCatalog(
   value: unknown,
@@ -43,6 +45,7 @@ export function parseCatalog(
   return data.models.map((value) => {
     const row = object(value);
     const group = canonicalId(row.group_id);
+    const groupName = groups.get(group);
     const upstream = text(row.upstream_model, 512);
     const id = text(row.id, 4096);
     requireValue(
@@ -54,12 +57,20 @@ export function parseCatalog(
       Array.isArray(row.apis) &&
         row.apis.every((api) => typeof api === "string"),
     );
+    const pricing = object(row.pricing);
+    const multiplier = pricing.group_multiplier;
+    requireValue(
+      multiplier === null ||
+        (typeof multiplier === "number" && Number.isFinite(multiplier) && multiplier >= 0),
+    );
     ids.add(id);
     return {
       id,
       group,
+      groupName: groupName!,
       upstream,
       name: text(row.name),
+      groupMultiplier: multiplier as number | null,
       apis: row.apis as string[],
     };
   });
@@ -120,7 +131,7 @@ export function zedSettings(
     );
     return {
       name: id,
-      display_name: model.name,
+      display_name: `${model.groupName} / ${model.upstream} · ${model.groupMultiplier === null ? "倍率未知" : `${model.groupMultiplier}×`} · context估算`,
       max_tokens: entry.max_tokens,
       ...(entry.max_output_tokens === undefined
         ? {}

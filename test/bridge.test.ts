@@ -20,8 +20,10 @@ const models = [
     id,
     name: "Real model",
     group,
+    groupName: "default",
     upstream: "real-model",
     apis: ["openai-completions", "openai-responses"],
+    groupMultiplier: 1.25,
   },
 ];
 const auth = {
@@ -252,6 +254,51 @@ test("credential persistence is private and refresh tokens are durably fenced", 
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("catalog display preserves group and multiplier while keeping fallback metadata explicit", () => {
+  const parsed = parseCatalog(
+    {
+      schema_version: 1,
+      resource: auth.lmm_resource,
+      groups: [{ id: group, name: "default", scope: `group:${group}` }],
+      models: [
+        {
+          id: `lmm:${group}:${Buffer.from("a").toString("base64url")}`,
+          group_id: group,
+          group: "default",
+          upstream_model: "a",
+          name: "A",
+          apis: ["openai-completions"],
+          pricing: { group_multiplier: 1.25 },
+        },
+        {
+          id: `lmm:${group}:${Buffer.from("b").toString("base64url")}`,
+          group_id: group,
+          group: "default",
+          upstream_model: "b",
+          name: "B",
+          apis: ["openai-completions"],
+          pricing: { group_multiplier: null },
+        },
+      ],
+    },
+    auth.lmm_resource,
+    `catalog:read group:${group}`,
+  );
+  assert.deepEqual(parsed.map((model) => model.groupMultiplier), [1.25, null]);
+  const generated = zedSettings(parsed, defaultConfiguration(parsed), 7391)
+    .language_models.openai_compatible.lmm.available_models;
+  assert.equal(generated.length, 2);
+  assert.deepEqual(generated.map((model) => model.display_name), [
+    "default / a · 1.25× · context估算",
+    "default / b · 倍率未知 · context估算",
+  ]);
+  assert.deepEqual(generated.map((model) => model.max_tokens), [32768, 32768]);
+  assert.deepEqual(generated.map((model) => model.capabilities), [
+    { tools: false, images: false, parallel_tool_calls: false, chat_completions: true },
+    { tools: false, images: false, parallel_tool_calls: false, chat_completions: true },
+  ]);
 });
 
 test("automatic settings includes all OpenAI catalog models with documented fallback", () => {
