@@ -14,7 +14,7 @@
   "files": [
     "assets",
     "src",
-    "README.md",
+    "README.md", "DYNAMIC_CATALOG.md",
     "LICENSE",
     "PROVENANCE.md",
     "dist"

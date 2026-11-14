@@ -138,7 +138,7 @@ async function main() {
   const backup = await configureSettings(
     settingsPath,
     settings.language_models.openai_compatible.lmm,
-    modelPath === undefined,
+    modelPath === undefined && !models.some(model => model.metadata !== undefined),
   );
   console.log(
     `Zed LMM provider configured: ${settingsPath}${backup ? "\nBackup: " + backup : ""}`,
@@ -152,6 +152,14 @@ async function main() {
     key,
     port,
     credential: current,
+    refreshModels: async () => {
+      const credential = await current();
+      const latest = parseCatalog(await http.bearer('/api/oauth2/catalog', credential.access), http.resource, credential.scope);
+      const selected = modelPath ? latest.filter(model => admitted.has(model.id)) : latest;
+      const next = zedSettings(selected, modelPath ? configuration.filter(item => selected.some(model => model.id === item.id)) : defaultConfiguration(selected), port);
+      await configureSettings(settingsPath, next.language_models.openai_compatible.lmm, false);
+      return selected;
+    },
   });
   console.log(
     `LMM bridge listening on 127.0.0.1:${bridge.port}. Quit existing Zed before starting so it receives LMM_API_KEY.`,

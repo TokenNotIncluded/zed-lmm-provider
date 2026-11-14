@@ -1,5 +1,7 @@
 # LMM for Zed
 
+Current server metadata behavior: [Dynamic OAuth catalog](DYNAMIC_CATALOG.md). Server metadata takes precedence over the legacy snapshot behavior described below.
+
 <img src="./assets/icon.svg" alt="LMM for Zed" width="128" height="128" />
 
 **0.1.1 is a preview release.** Browser login requires the LMM server to register `lmm-zed` and advertise it in authorization-server metadata as `lmm_client_ids_supported`. Before opening a browser, the bridge verifies that registration along with the issuer, endpoints, S256 PKCE, and resource metadata. An older server receives a clear Zed-specific update message; the bridge never substitutes another client's identity. Packaging and local tests do not establish live production login or model access.

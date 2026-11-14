@@ -17,12 +17,17 @@ export async function startBridge(options: {
   key: string;
   port: number;
   credential(): Promise<LmmCredential>;
+  refreshModels?(): Promise<Model[]>;
 }) {
   requireValue(
     options.key.length >= 32,
     "A strong local bridge key is required.",
   );
-  const models = new Map(options.models.map((model) => [model.id, model]));
+  let currentModels = options.models;
+  const refresh = async () => {
+    if (options.refreshModels) currentModels = await options.refreshModels();
+    return new Map(currentModels.map(model => [model.id, model]));
+  };
   let authority = "";
   const server = createServer(
     { maxHeaderSize: 16384 },
@@ -46,11 +51,14 @@ export async function startBridge(options: {
         return;
       }
       if (request.method === "GET" && request.url === "/v1/models") {
+        try { await refresh(); }
+        catch { fail(502, "LMM catalog refresh failed."); return; }
         response.writeHead(200, { "content-type": "application/json" });
         response.end(
           JSON.stringify({
             object: "list",
-            data: options.models.map((model) => ({
+            data: currentModels.map((model) => ({
+              ...model,
               id: model.id,
               object: "model",
               owned_by: "lmm",
@@ -102,6 +110,7 @@ export async function startBridge(options: {
             !Array.isArray(body) &&
             typeof body.model === "string",
         );
+        const models = await refresh();
         const model = models.get(body.model);
         requireValue(
           model && model.apis.includes(api),

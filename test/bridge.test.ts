@@ -352,3 +352,17 @@ test("configure preserves JSONC comments, other settings, existing model metadat
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('bridge discovery refreshes catalog and fails visibly instead of retaining revoked routes', async t => {
+  let latest = models;
+  let fail = false;
+  const bridge = await startBridge({http: new LmmHttp({issuer:'https://lmm.test'}),models,key:'x'.repeat(32),port:0,
+    credential:async()=>auth, refreshModels:async()=>{if(fail) throw new Error('revoked'); return latest;}});
+  t.after(()=>bridge.close());
+  const request = () => fetch(`http://127.0.0.1:${bridge.port}/v1/models`,{headers:{authorization:`Bearer ${'x'.repeat(32)}`}});
+  assert.equal((await (await request()).json()).data[0].upstream,'real-model');
+  latest = [];
+  assert.deepEqual((await (await request()).json()).data,[]);
+  fail = true;
+  assert.equal((await request()).status,502);
+});

@@ -1,3 +1,4 @@
+import { parseMetadata, contextBudget, textOutput, type ServerMetadata } from "./server-metadata.ts";
 import {
   base64url,
   canonicalId,
@@ -13,6 +14,8 @@ export interface Model {
   groupName: string;
   upstream: string;
   apis: string[];
+  metadata?: ServerMetadata;
+  pricing?: Record<string, unknown>;
   groupMultiplier: number | null;
 }
 export function parseCatalog(
@@ -72,12 +75,12 @@ export function parseCatalog(
       name: text(row.name),
       groupMultiplier: multiplier as number | null,
       apis: row.apis as string[],
+      metadata: parseMetadata(row.metadata), pricing,
     };
   });
 }
 
-// Context limits and tool/image support are user-supplied verified metadata.
-// The OAuth catalog v1 does not expose these; never guess from model names.
+// Optional user overrides for server metadata; never guess from model names.
 export interface ModelConfiguration {
   id: string;
   max_tokens: number;
@@ -131,7 +134,7 @@ export function zedSettings(
     );
     return {
       name: id,
-      display_name: `${model.groupName} / ${model.upstream} · ${model.groupMultiplier === null ? "倍率未知" : `${model.groupMultiplier}×`} · context估算`,
+      display_name: `${model.groupName} / ${model.upstream} · ${model.groupMultiplier === null ? "倍率未知" : `${model.groupMultiplier}×`} · ${model.metadata ? "server metadata" : "context估算"}`,
       max_tokens: entry.max_tokens,
       ...(entry.max_output_tokens === undefined
         ? {}
@@ -145,10 +148,6 @@ export function zedSettings(
       },
     };
   });
-  requireValue(
-    available_models.length > 0,
-    "Configure at least one verified model.",
-  );
   return {
     language_models: {
       openai_compatible: {
@@ -166,10 +165,11 @@ export function defaultConfiguration(models: Model[]): ModelConfiguration[] {
         model.apis.includes("openai-completions") ||
         model.apis.includes("openai-responses"),
     )
+    .filter(model => !model.metadata || (textOutput(model.metadata) && contextBudget(model.metadata) && model.metadata.max_output_tokens))
     .map((model) => ({
       id: model.id,
-      max_tokens: 32768,
-      max_output_tokens: 4096,
-      capabilities: { tools: false, images: false, parallel_tool_calls: false },
+      max_tokens: model.metadata ? contextBudget(model.metadata)! : 32768,
+      max_output_tokens: model.metadata ? Math.min(model.metadata.max_output_tokens!, contextBudget(model.metadata)!) : 4096,
+      capabilities: { tools: model.metadata?.tool_call === true, images: false, parallel_tool_calls: false },
     }));
 }
