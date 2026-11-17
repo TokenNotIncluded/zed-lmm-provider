@@ -115,3 +115,10 @@ for (const status of [200, 403]) {
     assert.equal(cancelled, true);
   });
 }
+
+test('full catalog responses exceed the old 2 MB cap without widening OAuth responses', async () => {
+  const body = JSON.stringify({ models: [{ id: 'future-route', description: 'x'.repeat(5_000_000) }] });
+  const http = new LmmHttp({ fetch: async () => new Response(body, { headers: { 'content-type': 'application/json' } }) });
+  assert.equal((await http.bearer('/api/oauth2/catalog', 'synthetic-access')).models instanceof Array, true);
+  await assert.rejects(http.request('/.well-known/oauth-authorization-server'), /size limit/);
+});
