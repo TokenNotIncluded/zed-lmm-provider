@@ -46,3 +46,31 @@ test('fuzzy public metadata fills missing fields and keeps every compatible auth
   assert.equal(configured[0]!.capabilities!.images,true);
   assert.equal(configured[1]!.max_tokens,32768);
 });
+
+test('declared non-chat types with text output remain in the directory but not Zed chat settings', () => {
+  const types = ['embedding','reranking','transcription'];
+  const records = Object.fromEntries(types.map((type,index) => [`future-${index}`, {
+    id:`future-${index}`,name:`Future ${index}`,type,limit:{context:128000,output:4096},
+    modalities:{input:['text'],output:['text']},reasoning:false,tool_call:false,
+  }]));
+  const references = new ModelsDevCatalog({ example:{id:'example',models:records} });
+  const rows = types.map((_type,index) => ({...row,upstream_model:`future-${index}`,
+    id:`lmm:${group}:${Buffer.from(`future-${index}`).toString('base64url')}`,metadata:undefined}));
+  const models = parseCatalog({schema_version:1,resource:'https://lmm.test/api/oauth2',
+    groups:[{id:group,name:'default',scope:`group:${group}`}],models:rows},
+    'https://lmm.test/api/oauth2',`group:${group}`,references);
+  assert.equal(models.length,types.length);
+  assert.deepEqual(defaultConfiguration(models),[]);
+});
+
+test('public zero limits are unknown and do not remove an authorized chat route', () => {
+  const references = new ModelsDevCatalog({custom:{id:'custom',models:{future:{
+    id:'future',name:'Future',limit:{context:0,output:0},
+    modalities:{input:['text'],output:['text']},reasoning:false,tool_call:false,
+  }}}});
+  const model = {...read([{...row,metadata:undefined}])[0]!,upstream:'future',reference:references.resolve('future')};
+  const config=defaultConfiguration([model]);
+  assert.equal(config.length,1);
+  assert.equal(config[0]!.max_tokens,32768);
+  assert.equal(config[0]!.max_output_tokens,4096);
+});

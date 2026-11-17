@@ -165,6 +165,7 @@ export function defaultConfiguration(models: Model[]): ModelConfiguration[] {
   return models
     .filter((model) => model.apis.includes("openai-completions") || model.apis.includes("openai-responses"))
     .filter((model) => {
+      if (model.reference?.type && model.reference.type !== "chat") return false;
       const input = model.metadata?.input_modalities ?? model.reference?.modalities.input;
       const output = model.metadata?.output_modalities ?? model.reference?.modalities.output;
       return (!input || input.includes("text")) && (!output || output.includes("text"));
