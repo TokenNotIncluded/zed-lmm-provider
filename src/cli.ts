@@ -16,6 +16,7 @@ import {
 } from "./catalog.ts";
 import { startBridge } from "./bridge.ts";
 import { configureSettings } from "./settings.ts";
+import { loadModelsDev } from "./models-dev-cache.ts";
 
 async function main() {
   const [command, ...args] = process.argv.slice(2);
@@ -106,10 +107,12 @@ async function main() {
     }
   };
   const auth = await current();
+  const [rawCatalog, references] = await Promise.all([http.bearer("/api/oauth2/catalog", auth.access), loadModelsDev()]);
   const models = parseCatalog(
-    await http.bearer("/api/oauth2/catalog", auth.access),
+    rawCatalog,
     http.resource,
     auth.scope,
+    references,
   );
   if (command === "catalog") {
     console.log(JSON.stringify(models, null, 2));
@@ -138,7 +141,7 @@ async function main() {
   const backup = await configureSettings(
     settingsPath,
     settings.language_models.openai_compatible.lmm,
-    modelPath === undefined && !models.some(model => model.metadata !== undefined),
+    modelPath === undefined && !models.some(model => model.metadata !== undefined || model.reference !== undefined),
   );
   console.log(
     `Zed LMM provider configured: ${settingsPath}${backup ? "\nBackup: " + backup : ""}`,
@@ -154,7 +157,8 @@ async function main() {
     credential: current,
     refreshModels: async () => {
       const credential = await current();
-      const latest = parseCatalog(await http.bearer('/api/oauth2/catalog', credential.access), http.resource, credential.scope);
+      const [raw, references] = await Promise.all([http.bearer('/api/oauth2/catalog', credential.access), loadModelsDev()]);
+      const latest = parseCatalog(raw, http.resource, credential.scope, references);
       const selected = modelPath ? latest.filter(model => admitted.has(model.id)) : latest;
       const next = zedSettings(selected, modelPath ? configuration.filter(item => selected.some(model => model.id === item.id)) : defaultConfiguration(selected), port);
       await configureSettings(settingsPath, next.language_models.openai_compatible.lmm, false);

@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {parseCatalog, defaultConfiguration, zedSettings} from '../src/catalog.ts';
+import {ModelsDevCatalog} from '../src/models-dev-cache.ts';
 const group = 'ZGVmYXVsdA', upstream = 'future-model';
 const id = `lmm:${group}:${Buffer.from(upstream).toString('base64url')}`;
 const metadata = {context_window:128000,max_input_tokens:100000,max_output_tokens:16000,
@@ -20,6 +21,28 @@ test('Zed synchronizes new model metadata and preserves raw prices without stati
   assert.equal(defaultConfiguration(changed)[0]!.max_tokens,64000);
   assert.deepEqual(defaultConfiguration(read([])),[]);
   assert.deepEqual(zedSettings([], [], 7391).language_models.openai_compatible.lmm.available_models, []);
-  assert.deepEqual(defaultConfiguration(read([{...row,metadata:{...metadata,context_window:null,max_input_tokens:null}}])),[]);
+  assert.equal(defaultConfiguration(read([{...row,metadata:{...metadata,context_window:null,max_input_tokens:null}}]))[0]?.max_tokens,32768);
   assert.throws(() => read([{...row,metadata:{...metadata,max_output_tokens:-1}}]));
+});
+
+
+test('fuzzy public metadata fills missing fields and keeps every compatible authorized route', () => {
+  const references = new ModelsDevCatalog({ example: { id: 'example', models: { 'nebula-pro-1': {
+    id:'nebula-pro-1', name:'Nebula Pro 1', limit:{context:256000,output:16000},
+    modalities:{input:['text','image'],output:['text','audio']},tool_call:true,reasoning:true,
+  } } } });
+  const upstream = 'gateway/NEBULA_Pro.1';
+  const known = {...row,upstream_model:upstream,name:upstream,id:`lmm:${group}:${Buffer.from(upstream).toString('base64url')}`,
+    metadata:{...metadata,context_window:64000,max_input_tokens:null,max_output_tokens:null,input_modalities:null,output_modalities:null,tool_call:false}};
+  const data = {schema_version:1,resource:'https://lmm.test/api/oauth2',groups:[{id:group,name:'default',scope:`group:${group}`}],models:[known,{...row,metadata:undefined}]};
+  const models = parseCatalog(data,'https://lmm.test/api/oauth2',`group:${group}`,references);
+  const configured = defaultConfiguration(models);
+  assert.equal(models.length,2);
+  assert.equal(configured.length,2);
+  assert.equal(configured[0]!.id,known.id);
+  assert.equal(configured[0]!.max_tokens,64000);
+  assert.equal(configured[0]!.max_output_tokens,16000);
+  assert.equal(configured[0]!.capabilities!.tools,false);
+  assert.equal(configured[0]!.capabilities!.images,true);
+  assert.equal(configured[1]!.max_tokens,32768);
 });

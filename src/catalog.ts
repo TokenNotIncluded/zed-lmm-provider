@@ -1,4 +1,5 @@
-import { parseMetadata, contextBudget, textOutput, type ServerMetadata } from "./server-metadata.ts";
+import { parseMetadata, type ServerMetadata } from "./server-metadata.ts";
+import { peekModelsDev, type ModelsDevCatalog, type ModelsDevMetadata } from "./models-dev-cache.ts";
 import {
   base64url,
   canonicalId,
@@ -15,6 +16,7 @@ export interface Model {
   upstream: string;
   apis: string[];
   metadata?: ServerMetadata;
+  reference?: ModelsDevMetadata;
   pricing?: Record<string, unknown>;
   groupMultiplier: number | null;
 }
@@ -22,6 +24,7 @@ export function parseCatalog(
   value: unknown,
   resource: string,
   scope: string,
+  references: ModelsDevCatalog = peekModelsDev(),
 ): Model[] {
   const data = object(value);
   requireValue(data.schema_version === 1 && data.resource === resource);
@@ -75,12 +78,12 @@ export function parseCatalog(
       name: text(row.name),
       groupMultiplier: multiplier as number | null,
       apis: row.apis as string[],
-      metadata: parseMetadata(row.metadata), pricing,
+      metadata: parseMetadata(row.metadata), reference: references.resolve(upstream), pricing,
     };
   });
 }
 
-// Optional user overrides for server metadata; never guess from model names.
+// User overrides remain bound to authorized route IDs; fuzzy matching only supplies metadata.
 export interface ModelConfiguration {
   id: string;
   max_tokens: number;
@@ -134,7 +137,7 @@ export function zedSettings(
     );
     return {
       name: id,
-      display_name: `${model.groupName} / ${model.upstream} · ${model.groupMultiplier === null ? "倍率未知" : `${model.groupMultiplier}×`} · ${model.metadata ? "server metadata" : "context估算"}`,
+      display_name: `${model.groupName} / ${model.upstream} · ${model.groupMultiplier === null ? "倍率未知" : `${model.groupMultiplier}×`} · ${model.metadata ? "server metadata" : model.reference ? "models.dev reference" : "context估算"}`,
       max_tokens: entry.max_tokens,
       ...(entry.max_output_tokens === undefined
         ? {}
@@ -157,19 +160,30 @@ export function zedSettings(
   };
 }
 
-/** Compatibility fallback, not a claim about upstream limits or capabilities. */
+/** Metadata enriches every compatible authorized route; a miss never removes it. */
 export function defaultConfiguration(models: Model[]): ModelConfiguration[] {
   return models
-    .filter(
-      (model) =>
-        model.apis.includes("openai-completions") ||
-        model.apis.includes("openai-responses"),
-    )
-    .filter(model => !model.metadata || (textOutput(model.metadata) && contextBudget(model.metadata) && model.metadata.max_output_tokens))
-    .map((model) => ({
-      id: model.id,
-      max_tokens: model.metadata ? contextBudget(model.metadata)! : 32768,
-      max_output_tokens: model.metadata ? Math.min(model.metadata.max_output_tokens!, contextBudget(model.metadata)!) : 4096,
-      capabilities: { tools: model.metadata?.tool_call === true, images: false, parallel_tool_calls: false },
-    }));
+    .filter((model) => model.apis.includes("openai-completions") || model.apis.includes("openai-responses"))
+    .filter((model) => {
+      const input = model.metadata?.input_modalities ?? model.reference?.modalities.input;
+      const output = model.metadata?.output_modalities ?? model.reference?.modalities.output;
+      return (!input || input.includes("text")) && (!output || output.includes("text"));
+    })
+    .map((model) => {
+      const context = model.metadata?.context_window ?? model.reference?.limit.context;
+      const input = model.metadata?.max_input_tokens ?? model.reference?.limit.input;
+      const budget = Math.min(context && context > 0 ? context : input && input > 0 ? input : 32768, input && input > 0 ? input : Infinity);
+      const output = model.metadata?.max_output_tokens ?? model.reference?.limit.output;
+      const modalities = model.metadata?.input_modalities ?? model.reference?.modalities.input;
+      return {
+        id: model.id,
+        max_tokens: budget,
+        max_output_tokens: Math.min(output && output > 0 ? output : 4096, budget),
+        capabilities: {
+          tools: (model.metadata?.tool_call ?? model.reference?.tool_call) === true,
+          images: modalities?.includes("image") === true,
+          parallel_tool_calls: false,
+        },
+      };
+    });
 }
