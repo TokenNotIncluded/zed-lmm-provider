@@ -12,13 +12,13 @@ const read = (models: unknown[]) => parseCatalog({schema_version:1,resource:'htt
 test('Zed synchronizes new model metadata and preserves raw prices without static model IDs', () => {
   const models = read([row]);
   const settings = zedSettings(models,defaultConfiguration(models),7391).language_models.openai_compatible.lmm;
-  assert.equal(settings.available_models[0]!.max_tokens,100000);
+  assert.equal(settings.available_models[0]!.max_tokens,64000);
   assert.equal(settings.available_models[0]!.max_output_tokens,16000);
   assert.equal(settings.available_models[0]!.capabilities.tools,true);
   assert.equal(models[0]!.pricing!.input,1);
   assert.equal(models[0]!.upstream,upstream);
   const changed = read([{...row,metadata:{...metadata,context_window:64000}}]);
-  assert.equal(defaultConfiguration(changed)[0]!.max_tokens,64000);
+  assert.equal(defaultConfiguration(changed)[0]!.max_tokens,32000);
   assert.deepEqual(defaultConfiguration(read([])),[]);
   assert.deepEqual(zedSettings([], [], 7391).language_models.openai_compatible.lmm.available_models, []);
   assert.equal(defaultConfiguration(read([{...row,metadata:{...metadata,context_window:null,max_input_tokens:null}}]))[0]?.max_tokens,32768);
@@ -40,7 +40,7 @@ test('fuzzy public metadata fills missing fields and keeps every compatible auth
   assert.equal(models.length,2);
   assert.equal(configured.length,2);
   assert.equal(configured[0]!.id,known.id);
-  assert.equal(configured[0]!.max_tokens,64000);
+  assert.equal(configured[0]!.max_tokens,32000);
   assert.equal(configured[0]!.max_output_tokens,16000);
   assert.equal(configured[0]!.capabilities!.tools,false);
   assert.equal(configured[0]!.capabilities!.images,true);
@@ -73,4 +73,32 @@ test('public zero limits are unknown and do not remove an authorized chat route'
   assert.equal(config.length,1);
   assert.equal(config[0]!.max_tokens,32768);
   assert.equal(config[0]!.max_output_tokens,4096);
+});
+
+test('Zed uses half the context, keeps explicit context overrides, and respects the gateway output cap', () => {
+  const models = read([{ ...row, metadata: {
+    ...metadata, context_window: 128001, max_input_tokens: 60000, gateway_max_output_tokens: 2048,
+  } }]);
+  assert.equal(defaultConfiguration(models)[0]!.max_tokens, 60000);
+  assert.equal(defaultConfiguration(models)[0]!.max_output_tokens, 2048);
+  const settings = zedSettings(models, [{ id, max_tokens: 83000, max_output_tokens: 4000 }], 7391);
+  const [configured] = settings.language_models.openai_compatible.lmm.available_models;
+  assert.equal(configured?.max_tokens, 83000);
+  assert.equal(configured?.max_output_tokens, 2048);
+  assert.throws(() => read([{ ...row, metadata: { ...metadata, gateway_max_output_tokens: 0 } }]));
+});
+
+test('an exact models.dev identity cannot suppress a competing typo match', () => {
+  const profile = (id: string, context: number, canonical_model_id?: string) => ({
+    id, name: id, canonical_model_id, limit: { context, output: 8192 },
+    modalities: { input: ['text'], output: ['text'] }, reasoning: true, tool_call: true,
+  });
+  const directory = new ModelsDevCatalog({
+    first: { models: { 'nebula-spark-1': profile('nebula-spark-1', 128000) } },
+    second: { models: { 'nebula-shark-1': profile('nebula-shark-1', 64000) } },
+    mirror: { models: { 'nebula-spark-1': profile('nebula-spark-1', 128000, 'first/nebula-spark-1') } },
+  });
+  assert.equal(directory.resolve('first/nebula-spark-1')?.limit.context, 128000);
+  assert.equal(directory.resolve('first/nebula-stark-1')?.limit.context, 128000);
+  assert.equal(directory.resolve('nebula-stark-1'), undefined);
 });

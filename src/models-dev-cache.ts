@@ -188,12 +188,13 @@ export class ModelsDevCatalog {
     }
   }
 
-  private choose(entries: Entry[], preferred?: string): ModelsDevMetadata | undefined {
+  private choose(entries: Entry[], preferred?: string, fuzzy = false): ModelsDevMetadata | undefined {
     let candidates = entries;
     if (preferred) {
       const sameProvider = candidates.filter((entry) => entry.model.provider === preferred);
       if (sameProvider.length) candidates = sameProvider;
     }
+    if (fuzzy && new Set(candidates.map((entry) => entry.identity)).size !== 1) return undefined;
     const direct = candidates.filter((entry) => entry.direct);
     if (direct.length) candidates = direct;
     if (new Set(candidates.map((entry) => entry.identity)).size !== 1) return undefined;
@@ -253,7 +254,7 @@ export class ModelsDevCatalog {
     if (!scored.size) return undefined;
     const best = Math.max(...scored.values());
     // A near-tie between different model identities is unknown, not an arbitrary winner.
-    return this.choose([...scored].filter(([, score]) => best - score < 0.04).map(([entry]) => entry), preferred);
+    return this.choose([...scored].filter(([, score]) => best - score < 0.04).map(([entry]) => entry), preferred, true);
   }
 }
 

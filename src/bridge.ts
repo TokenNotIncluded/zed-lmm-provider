@@ -116,6 +116,19 @@ export async function startBridge(options: {
           model && model.apis.includes(api),
           "Model is unavailable for this protocol or outside the granted catalog.",
         );
+        const outputCap = model.metadata?.gateway_max_output_tokens;
+        if (outputCap !== undefined && outputCap !== null) {
+          const outputFields = api === "openai-responses"
+            ? ["max_output_tokens"]
+            : ["max_completion_tokens", "max_tokens"];
+          for (const field of outputFields) {
+            const requested = body[field];
+            if (requested !== undefined && requested !== null) {
+              requireValue(Number.isSafeInteger(requested) && requested > 0);
+              body[field] = Math.min(requested, outputCap);
+            }
+          }
+        }
         const auth = await options.credential();
         requireValue(
           auth.scope.split(" ").includes(`group:${model.group}`) &&

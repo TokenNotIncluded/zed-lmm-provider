@@ -4,7 +4,7 @@ Model discovery and cached metadata: [Dynamic OAuth catalog](DYNAMIC_CATALOG.md)
 
 <img src="./assets/icon.svg" alt="LMM for Zed" width="128" height="128" />
 
-**0.1.3 is a preview release.** Browser login requires the LMM server to register `lmm-zed` and advertise it in authorization-server metadata as `lmm_client_ids_supported`. Before opening a browser, the bridge verifies that registration along with the issuer, endpoints, S256 PKCE, and resource metadata. An older server receives a clear Zed-specific update message; the bridge never substitutes another client's identity. Packaging and local tests do not establish live production login or model access.
+**0.1.5 is a preview release.** Browser login requires the LMM server to register `lmm-zed` and advertise it in authorization-server metadata as `lmm_client_ids_supported`. Before opening a browser, the bridge verifies that registration along with the issuer, endpoints, S256 PKCE, and resource metadata. An older server receives a clear Zed-specific update message; the bridge never substitutes another client's identity. Packaging and local tests do not establish live production login or model access.
 
 Use your LMM OAuth account in Zed's native AI model selector, with account-scoped models and automatic token refresh. No LMM API key is needed.
 
@@ -17,7 +17,7 @@ The package includes the editable LMM for Zed mark in `assets/icon.svg` and its 
 Requires Node.js 22.19+ and the `zed` command in PATH.
 
 ```sh
-npm install -g https://github.com/TokenNotIncluded/zed-lmm-provider/releases/download/v0.1.3/tokennotincluded-zed-lmm-provider-0.1.3.tgz
+npm install -g https://github.com/TokenNotIncluded/zed-lmm-provider/releases/download/v0.1.5/tokennotincluded-zed-lmm-provider-0.1.5.tgz
 lmm-zed login
 # Quit all existing Zed windows first.
 lmm-zed start
@@ -33,7 +33,7 @@ The generated provider uses only OpenAI Chat Completions or Responses models adv
 
 ## Model limits and capabilities
 
-Automatic setup uses the current LMM catalog and enriches missing fields from [models.dev](https://models.dev/api.json?type=all), downloaded and cached automatically. Matching tolerates case, punctuation and provider prefixes; it does not change authorized wire IDs. Server limits/capabilities take priority. Tools and images are enabled when metadata declares support. Unknown compatible models remain visible with labeled **32,768 context / 4,096 output compatibility estimates** and unverified capabilities disabled. Parallel tool calls remain disabled unless explicitly configured.
+Automatic setup uses the current LMM catalog and enriches missing fields from [models.dev](https://models.dev/api.json?type=all), downloaded and cached automatically. Matching tolerates case, punctuation and provider prefixes; it does not change authorized wire IDs. Server limits and capabilities take priority. The default working context uses half the known maximum, rounded down and constrained by the input limit. Explicit model context overrides remain available. Advertised gateway output caps apply to generated settings and bridge requests. Tools and images are enabled when metadata declares support. Unknown compatible models remain visible with labeled **32,768 context / 4,096 output compatibility estimates** and unverified capabilities disabled. Parallel tool calls remain disabled unless explicitly configured.
 
 Optional verified overrides:
 

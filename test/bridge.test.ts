@@ -8,6 +8,7 @@ import {
   defaultConfiguration,
 } from "../src/catalog.ts";
 import { Store } from "../src/store.ts";
+import { parseMetadata } from "../src/server-metadata.ts";
 import { RefreshJournal } from "../src/vendor/refresh-journal.ts";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -97,6 +98,39 @@ test("bridge restricts auth/browser traffic/model groups, maps upstream model an
     assert.equal(headers.get("authorization"), "Bearer lmm_at_test");
     assert.equal(headers.get("x-lmm-group"), group);
     assert.equal(headers.get("cookie"), null);
+  } finally {
+    bridge.close();
+  }
+});
+
+test("bridge streams authorized Chat and Responses routes using the current gateway output cap", async () => {
+  const trace: { url: string; body: Record<string, unknown>; group: string | null }[] = [];
+  const http = new LmmHttp({
+    fetch: async (url, init) => {
+      trace.push({ url: String(url), body: JSON.parse(String(init?.body)), group: new Headers(init?.headers).get("x-lmm-group") });
+      return new Response("data: [DONE]\n\n", { headers: { "content-type": "text/event-stream" } });
+    },
+  });
+  const key = "c".repeat(43);
+  const bridge = await startBridge({
+    http, key, port: 0, credential: async () => auth,
+    models: [{ ...models[0]!, metadata: parseMetadata({ source: "server", gateway_max_output_tokens: 2048 }) }],
+  });
+  try {
+    for (const [path, field] of [["/v1/chat/completions", "max_completion_tokens"], ["/v1/responses", "max_output_tokens"]]) {
+      const reply = await fetch(`http://127.0.0.1:${bridge.port}${path}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+        body: JSON.stringify({ model: id, [field!]: 5000, stream: true }),
+      });
+      assert.equal(reply.status, 200);
+      assert.equal(await reply.text(), "data: [DONE]\n\n");
+      assert.deepEqual(trace.pop(), {
+        url: `https://api.lmm.best${path}`,
+        group,
+        body: { model: "real-model", [field!]: 2048, stream: true },
+      });
+    }
   } finally {
     bridge.close();
   }

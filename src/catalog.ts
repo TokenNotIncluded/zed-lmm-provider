@@ -115,7 +115,8 @@ export function zedSettings(
       Number.isSafeInteger(entry.max_tokens) &&
         (entry.max_tokens as number) > 0,
     );
-    if (entry.max_output_tokens !== undefined)
+    const maxOutput = entry.max_output_tokens;
+    if (maxOutput !== undefined)
       requireValue(
         Number.isSafeInteger(entry.max_output_tokens) &&
           (entry.max_output_tokens as number) > 0 &&
@@ -139,9 +140,9 @@ export function zedSettings(
       name: id,
       display_name: `${model.groupName} / ${model.upstream} · ${model.groupMultiplier === null ? "倍率未知" : `${model.groupMultiplier}×`} · ${model.metadata ? "server metadata" : model.reference ? "models.dev reference" : "context估算"}`,
       max_tokens: entry.max_tokens,
-      ...(entry.max_output_tokens === undefined
+      ...(maxOutput === undefined
         ? {}
-        : { max_output_tokens: entry.max_output_tokens }),
+        : { max_output_tokens: Math.min(maxOutput as number, model.metadata?.gateway_max_output_tokens ?? Infinity) }),
       capabilities: {
         tools: false,
         images: false,
@@ -173,13 +174,15 @@ export function defaultConfiguration(models: Model[]): ModelConfiguration[] {
     .map((model) => {
       const context = model.metadata?.context_window ?? model.reference?.limit.context;
       const input = model.metadata?.max_input_tokens ?? model.reference?.limit.input;
-      const budget = Math.min(context && context > 0 ? context : input && input > 0 ? input : 32768, input && input > 0 ? input : Infinity);
+      const maximumContext = context && context > 0 ? context : input && input > 0 ? input : undefined;
+      const defaultContext = maximumContext === undefined ? 32768 : Math.max(1, Math.floor(maximumContext / 2));
+      const budget = Math.min(defaultContext, input && input > 0 ? input : Infinity);
       const output = model.metadata?.max_output_tokens ?? model.reference?.limit.output;
       const modalities = model.metadata?.input_modalities ?? model.reference?.modalities.input;
       return {
         id: model.id,
         max_tokens: budget,
-        max_output_tokens: Math.min(output && output > 0 ? output : 4096, budget),
+        max_output_tokens: Math.min(output && output > 0 ? output : 4096, budget, model.metadata?.gateway_max_output_tokens ?? Infinity),
         capabilities: {
           tools: (model.metadata?.tool_call ?? model.reference?.tool_call) === true,
           images: modalities?.includes("image") === true,
