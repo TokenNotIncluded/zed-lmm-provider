@@ -330,8 +330,8 @@ test("catalog display preserves group and multiplier while keeping fallback meta
   ]);
   assert.deepEqual(generated.map((model) => model.max_tokens), [32768, 32768]);
   assert.deepEqual(generated.map((model) => model.capabilities), [
-    { tools: false, images: false, parallel_tool_calls: false, chat_completions: true },
-    { tools: false, images: false, parallel_tool_calls: false, chat_completions: true },
+    { tools: false, images: false, parallel_tool_calls: false, prompt_cache_key: false, chat_completions: true },
+    { tools: false, images: false, parallel_tool_calls: false, prompt_cache_key: false, chat_completions: true },
   ]);
 });
 

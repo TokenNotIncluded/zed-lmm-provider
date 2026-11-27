@@ -147,6 +147,8 @@ export function zedSettings(
         tools: false,
         images: false,
         parallel_tool_calls: false,
+        // Zed requires this boolean when settings include a capabilities object.
+        prompt_cache_key: false,
         ...capabilities,
         chat_completions: chat,
       },

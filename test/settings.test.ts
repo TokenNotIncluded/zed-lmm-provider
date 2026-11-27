@@ -46,6 +46,7 @@ test("preserved limits and tool choices cannot override the current catalog prot
       tools: true,
       images: true,
       parallel_tool_calls: false,
+      prompt_cache_key: false,
       chat_completions: false,
     });
   }
